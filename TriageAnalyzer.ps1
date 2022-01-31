@@ -1,14 +1,20 @@
-﻿# Prompt user for this:
-$file ='C:\Temp\test.mans'
+﻿# Prompt for triage file
+Add-Type -AssemblyName System.Windows.Forms
+$FileBrowser = New-Object System.Windows.Forms.OpenFileDialog
+$FileBrowser.ShowDialog() | Out-Null
+$srcFile = $FileBrowser.filename
+
+Write-Host "Begin processing $srcFile"
 
 # Copy/extract triage
-$docRoot = Split-Path $file
-$tempFile = "$docRoot\tempTriage.zip"
-$tempDest = "$docRoot\tempTriage"
+$docRoot = Split-Path $srcFile
+$docName = (Split-Path $srcFile -Leaf).split('.')[0]
+$tempFile = "$docRoot\$docName.zip"
+$tempDest = "$docRoot\$docName"
 
 
 try{
-    Copy-Item -Path $file -Destination $tempFile -Force
+    Copy-Item -Path $srcFile -Destination $tempFile -Force
     Expand-Archive $tempFile -Force -DestinationPath $tempDest
 }
 catch{
@@ -45,27 +51,62 @@ $itemTypes = $tmp.itemList.eventItem.eventtype | sort -Unique
 
 foreach($type in $itemTypes){
     $group = $tmp.itemlist.eventItem | ? {$_.eventType -eq $type}
-    $percent = ($group.count/$tmp.itemlist.eventItem.count)*100
+    $procIndex = $group[0].details.detail.name.IndexOf('process')
+    $pathIndex = $group[0].details.detail.name.IndexOf('processPath')
+
+    $percent = [math]::Round(($group.count/$tmp.itemlist.eventItem.count)*100,0)
     Write-Host "-----------------------------------------------"
     Write-Host "Processing Event Type: $type" -ForegroundColor Yellow
     Write-Host "-----------------------------------------------"
     Write-Host "Total items of type, $($type): $($group.Count)"
-    Write-Host "Percentage of total events in Triage: $percent"    
-    $processes = (($group.details.detail | ? {$_.name -eq "process"}).value | sort | Group-Object) | sort Count -Descending | select Count, Name -First 10
+    Write-Host "Percentage of total events in Triage: $percent"  
+    $processes = (($group.details.detail | ? {$_.name -eq "process"}).value | sort | Group-Object) | sort Count -Descending | select Count, Name -First 10  
     if($processes){
         Write-Host "_______________________________________________"
         Write-Host "`r`nTop 10 Processes for $($type):`r`n"
         Write-Host "Count    Name"
         Write-Host "-----    ----"
-        foreach($proc in $processes){
-            if (($path = (($group | ? {$_.details.detail.value -eq $proc.Name}).details.detail | ? {$_.name -eq "processPath"}).value | sort -Unique).count -eq 1){
-                $i = ".........".Substring($proc.count.ToString().length)
-                Write-Host "$($proc.Count)$($i)$($path)\$($proc.name)"
+        # Get all recorded paths for each of the top 10 processes 
+        foreach($proc in $processes){  
+            if($type -eq 'regKeyEvent'){
+                $path = @()
+                foreach($event in $group){
+                    $procIndex = $event.details.detail.name.IndexOf('process')
+                    $pathIndex = $event.details.detail.name.IndexOf('processPath')
+                    
+                    if($event.details.detail.value[$procIndex] -eq $proc.Name){
+                        if($path -notcontains $event.details.detail.value[$pathIndex]){
+                            $path+=$event.details.detail.value[$pathIndex]
+                        }
+                    }
+                }
+                if($path.count -eq 1){
+                    $i = ".........".Substring($proc.count.ToString().length)
+                    Write-Host "$($proc.Count)$($i)$($path)\$($proc.name)"
+                }
+                else{
+                    $i = ".........".Substring($proc.count.ToString().length)
+                    Write-Host "$($proc.Count)$($i)" -NoNewline
+                    write-host "[Multiple paths for process: $($proc.Name)]" -ForegroundColor Cyan
+                    foreach($p in $path){
+                        Write-Host "         - $($p)\$($proc.name)"
+                    }
+                }
             }
             else{
-                Write-Host "         [Multiple paths for process: $($proc.Name)]" -ForegroundColor Cyan
-                $i = ".........".Substring($proc.count.ToString().length)
-                Write-Host "$($proc.Count)$($i)$($path)\$($proc.name)"
+                  
+                if(($path = (($group | ? {$_.details.detail.value[$procIndex] -eq $proc.name}) | % { $_.details.detail.value[$pathIndex]}) | sort -Unique).count -eq 1){
+                    $i = ".........".Substring($proc.count.ToString().length)
+                    Write-Host "$($proc.Count)$($i)$($path)\$($proc.name)"
+                }
+                else{       
+                    $i = ".........".Substring($proc.count.ToString().length)
+                    Write-Host "$($proc.Count)$($i)" -NoNewline
+                    write-host "[Multiple paths for process: $($proc.Name)]" -ForegroundColor Cyan
+                    foreach($p in $path){
+                        Write-Host "         - $($p)\$($proc.name)"
+                    }
+                }
             }
         } 
         Write-Host "`r`n"

@@ -51,8 +51,6 @@ $itemTypes = $tmp.itemList.eventItem.eventtype | sort -Unique
 
 foreach($type in $itemTypes){
     $group = $tmp.itemlist.eventItem | ? {$_.eventType -eq $type}
-    $procIndex = $group[0].details.detail.name.IndexOf('process')
-    $pathIndex = $group[0].details.detail.name.IndexOf('processPath')
 
     $percent = [math]::Round(($group.count/$tmp.itemlist.eventItem.count)*100,0)
     Write-Host "-----------------------------------------------"
@@ -68,44 +66,27 @@ foreach($type in $itemTypes){
         Write-Host "-----    ----"
         # Get all recorded paths for each of the top 10 processes 
         foreach($proc in $processes){  
-            if($type -eq 'regKeyEvent'){
-                $path = @()
-                foreach($event in $group){
-                    $procIndex = $event.details.detail.name.IndexOf('process')
-                    $pathIndex = $event.details.detail.name.IndexOf('processPath')
+            $path = @()
+            foreach($event in $group){
+                $procIndex = $event.details.detail.name.IndexOf('process')
+                $pathIndex = $event.details.detail.name.IndexOf('processPath')
                     
-                    if($event.details.detail.value[$procIndex] -eq $proc.Name){
-                        if($path -notcontains $event.details.detail.value[$pathIndex]){
-                            $path+=$event.details.detail.value[$pathIndex]
-                        }
-                    }
-                }
-                if($path.count -eq 1){
-                    $i = ".........".Substring($proc.count.ToString().length)
-                    Write-Host "$($proc.Count)$($i)$($path)\$($proc.name)"
-                }
-                else{
-                    $i = ".........".Substring($proc.count.ToString().length)
-                    Write-Host "$($proc.Count)$($i)" -NoNewline
-                    write-host "[Multiple paths for process: $($proc.Name)]" -ForegroundColor Cyan
-                    foreach($p in $path){
-                        Write-Host "         - $($p)\$($proc.name)"
+                if($event.details.detail.value[$procIndex] -eq $proc.Name){
+                    if($path -notcontains $event.details.detail.value[$pathIndex]){
+                        $path+=$event.details.detail.value[$pathIndex]
                     }
                 }
             }
+            if($path.count -eq 1){
+                $i = ".........".Substring($proc.count.ToString().length)
+                Write-Host "$($proc.Count)$($i)$($path)\$($proc.name)"
+            }
             else{
-                  
-                if(($path = (($group | ? {$_.details.detail.value[$procIndex] -eq $proc.name}) | % { $_.details.detail.value[$pathIndex]}) | sort -Unique).count -eq 1){
-                    $i = ".........".Substring($proc.count.ToString().length)
-                    Write-Host "$($proc.Count)$($i)$($path)\$($proc.name)"
-                }
-                else{       
-                    $i = ".........".Substring($proc.count.ToString().length)
-                    Write-Host "$($proc.Count)$($i)" -NoNewline
-                    write-host "[Multiple paths for process: $($proc.Name)]" -ForegroundColor Cyan
-                    foreach($p in $path){
-                        Write-Host "         - $($p)\$($proc.name)"
-                    }
+                $i = ".........".Substring($proc.count.ToString().length)
+                Write-Host "$($proc.Count)$($i)" -NoNewline
+                write-host "[Multiple paths for process: $($proc.Name)]" -ForegroundColor Cyan
+                foreach($p in $path){
+                    Write-Host "         - $($p)\$($proc.name)"
                 }
             }
         } 
